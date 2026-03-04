@@ -226,19 +226,20 @@ def create_x_divider(df: pd.DataFrame, clusters: dict, valid_y_dividers: list[fl
             all_title_x_points.append(point)
             if point[0] > divider_x_position:
                 divider_x_position = point[0]
-                
+    
     while divider_x_position > 0:
         valid_position = True
         closest_word_dist = float("inf")
-
-        # Get closest cluster to divider_x_position
-        point = None
-        closest_title_point_dist = float("inf")
 
         if len(all_title_x_points) <= 0:
             break
 
         for i, _ in enumerate(valid_y_dividers):
+            
+            # Get closest cluster to divider_x_position
+            point = None
+            closest_title_point_dist = float("inf")
+            
             if i == len(valid_y_dividers) - 1:
                 break
             j = i + 1
@@ -371,12 +372,12 @@ def clean_chunks(chunks: list[str]) -> list[str]:
         
     return cleaned_chunks
 
-def vectorize_chunks(chunks: list[str], vectorizer: TfidfVectorizer()) -> pd.DataFrame:
+def vectorize_chunks(chunks: list[str], vectorizer: TfidfVectorizer) -> pd.DataFrame:
     vectorized_chunks = vectorizer.transform([chunk for chunk in chunks])
     vectorized_chunks_df = pd.DataFrame(vectorized_chunks.toarray(), columns=vectorizer.get_feature_names_out())
     return vectorized_chunks_df
 
-def classify_chunks(vectorized_chunks: pd.DataFrame, rf: RandomForestClassifier()) -> list[int]: return rf.predict(vectorized_chunks)
+def classify_chunks(vectorized_chunks: pd.DataFrame, rf: RandomForestClassifier) -> list[int]: return rf.predict(vectorized_chunks)
 
 ##---Embeddings and Comparison---##
 
@@ -390,6 +391,10 @@ def get_bert_embedding(text, tokenizer, model):
     return outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
 
 def create_similarity_matrix(resume_embeddings: list, job_listing_embeddings: list):
+    
+    if resume_embeddings is None or len(resume_embeddings) == 0:
+        return [[0.0] for _ in job_listing_embeddings]
+        
     similarity_matrix = []
     for i in job_listing_embeddings:
         similarity_arr = []
@@ -400,7 +405,9 @@ def create_similarity_matrix(resume_embeddings: list, job_listing_embeddings: li
 
 def best_match_aggregation(similarity_matrix: list) -> (float, float):
     best_matches = [max(arr) for arr in similarity_matrix]
-    aggregated_final_score = sum(best_matches) / len(best_matches)
+    aggregated_final_score = 0
+    if len(best_matches):
+        aggregated_final_score = sum(best_matches) / len(best_matches)
     return aggregated_final_score, best_matches
 
 def compare_resume_and_job_listing(resume_embeddings: list, job_listing_embeddings: list, report: bool=True) -> (float, float, list[float], float, list[float], float, list[float]):
@@ -530,9 +537,15 @@ def compare(resume: str, job_listing: str, progress_callback=None):
     ##---Embedding---##
     embedded_resume_sections = {}
     for section, texts in resume_sections.items():
-        embedded_resume_sections[section] = np.array([get_bert_embedding(text, tokenizer, model) 
-                                            for text in texts]
-        )
+        valid_texts = [t for t in texts if t.strip() != ""]
+
+        if len(valid_texts) == 0:
+            embedded_resume_sections[section] = None
+        else:
+            embedded_resume_sections[section] = np.array([
+                get_bert_embedding(text, tokenizer, model)
+                for text in valid_texts
+            ])
 
     embedded_job_listing_sections = {}
     for section, texts in job_listing_sections.items():

@@ -11,9 +11,14 @@ def progress_callback(step: int, total_steps: int, message: str = ""):
     progress_bar.progress(progress)
     status_text.text(message)
 
-def display_matched_requirements(results):
+def display_matched_requirements(results: list):
+    if not results:
+        st.text("No Job Listing Requirements Were Found")
+        return
     for score, requirement in results:
-        if score >= 0.80:
+        if score == 0.0:
+            badge_class = "badge-black"
+        elif score >= 0.80:
             badge_class = "badge-green"
         elif score >= 0.70:
             badge_class = "badge-yellow"
@@ -30,10 +35,11 @@ def display_matched_requirements(results):
         )
 
 @st.cache_data
-def render_pdf_first_page(file_bytes):
+def render_pdf_first_page(file_bytes: str):
     with pdfplumber.open(file_bytes) as pdf:
         page = pdf.pages[0]
         page_image = page.to_image(resolution=200)
+        print(type(page_image.original))
         return page_image.original
     
 st.markdown("""
@@ -61,6 +67,11 @@ st.markdown("""
         background-color: #601010;
         color: #FFB3B3;
     }
+            
+    .badge-black {
+        background-color: #1c1b1b;
+        color: #b0acac;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -79,9 +90,10 @@ if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(uploaded_file.read())
         tmp_file_path = tmp_file.name
+        print(type(tmp_file_path))
             
         with left:
-            st.image(render_pdf_first_page(tmp_file_path), use_container_width=True)
+            st.image(render_pdf_first_page(file_bytes=tmp_file_path), use_container_width=True)
 
 if button:
 
@@ -95,7 +107,7 @@ if button:
     
     if uploaded_file and text_area:
         with right:
-            results_container = st.container(height=564)
+            results_container = st.container(height=565)
             with results_container:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
@@ -121,19 +133,19 @@ if button:
                 # --- Required Experience ---
                 with st.container(border=True):
                     st.subheader("Required Experience")
-                    display_matched_requirements(experience_results)
+                    display_matched_requirements(results=experience_results)
                     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
                 # --- Required Education ---
                 with st.container(border=True):
                     st.subheader("Required Education")
-                    display_matched_requirements(education_results)
+                    display_matched_requirements(results=education_results)
                     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
                 # --- Required Skills ---
                 with st.container(border=True):
                     st.subheader("Required Skills")
-                    display_matched_requirements(skills_results)
+                    display_matched_requirements(results=skills_results)
                     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     
