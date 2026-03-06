@@ -19,7 +19,7 @@ from transformers.models.bert.modeling_bert import BertModel
 from sklearn.metrics.pairwise import cosine_similarity
 
 ##--Loading---##
-nlp = spacy.load("en_core_web_lg")
+nlp = spacy.load("en_core_web_sm")
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 model = BertModel.from_pretrained("bert-base-uncased")
 
@@ -183,12 +183,14 @@ def create_y_divider(df: pd.DataFrame, clusters: dict, detection_range: int=10):
         if len(all_title_y_points) <= 0:
             break
 
-        
+        # Find closest title point to divider_y_position
         for title_point in all_title_y_points:
             if closest_title_point_dist > abs(divider_y_position - title_point):
                 closest_title_point_dist = abs(divider_y_position - title_point)
+                # Set closest title point to point
                 point = title_point
-            
+
+        # Check if closest point is above divider_y_position and check if any non title words are near by.
         if point > divider_y_position:
             for _, word in df.iterrows():
                 if word["Y"] >= (divider_y_position - detection_range) and word["Y"] <= (divider_y_position + detection_range):
@@ -198,11 +200,19 @@ def create_y_divider(df: pd.DataFrame, clusters: dict, detection_range: int=10):
                     closest_word_dist = abs(divider_y_position - word["Y"])
         else:
             valid_position = False
-                            
+
+        for title_point in all_title_y_points:
+            # Skip point we know is closest to the divider
+            if title_point != point:
+                if abs(divider_y_position - title_point) <= detection_range:
+                    valid_position = False
+                    break
+
         if valid_position == True:
             if min(all_title_y_points) > divider_y_position:
                 valid_position = False
-        
+
+        # Don't create a divider if the closest word to it is not a title word
         if valid_position == True:
             if closest_word_dist < closest_title_point_dist:
                 valid_position = False
@@ -229,52 +239,38 @@ def create_x_divider(df: pd.DataFrame, clusters: dict, valid_y_dividers: list[fl
     
     while divider_x_position > 0:
         valid_position = True
-        closest_word_dist = float("inf")
-
         if len(all_title_x_points) <= 0:
             break
 
         for i, _ in enumerate(valid_y_dividers):
             
-            # Get closest cluster to divider_x_position
-            point = None
-            closest_title_point_dist = float("inf")
-            
             if i == len(valid_y_dividers) - 1:
                 break
             j = i + 1
             
-            for title_point in all_title_x_points:
-                x_dist_val = abs(divider_x_position - title_point[0])
-                if closest_title_point_dist > x_dist_val and title_point[1] <= valid_y_dividers[i] and title_point[1] >= valid_y_dividers[j]:
-                    closest_title_point_dist = x_dist_val
-                    point = title_point
+            # Check if there is at least one title cluster to the left and to the right
+            valid_title_x_points = [x[0] for x in all_title_x_points 
+                                    if x[1] <= valid_y_dividers[i] and x[1] >= valid_y_dividers[j]]
 
-            if point == None:
-                break
-
-            if divider_x_position > point[0]:
-                for _, word in df.iterrows():
-                    if word["Y"] <= valid_y_dividers[i] and word["Y"] >= valid_y_dividers[j]:
-                        if word["X"] >= (divider_x_position - detection_range) and word["X"] <= (divider_x_position + detection_range):
-                            valid_position = False
-                            break
-                        if closest_word_dist > abs(divider_x_position - word["X"]):
-                            closest_word_dist = abs(divider_x_position - word["X"])
-            else: 
-                valid_position = False
+            if not valid_title_x_points:
+                continue
                 
-            if valid_position == True:
-                valid_title_x_points = [x[0] for x in all_title_x_points if x[0] <= valid_y_dividers[i] and x[0] >= valid_y_dividers[j]]
-                if len(valid_title_x_points) > 0:
-                    if min(valid_title_x_points) > divider_x_position:
+            if not (min(valid_title_x_points) <= divider_x_position <= max(valid_title_x_points)):
+                continue
+
+            # Check if the divider detects a word near by, if so, place no divider here
+            for _, word in df.iterrows():
+                if word["Y"] <= valid_y_dividers[i] and word["Y"] >= valid_y_dividers[j]:
+                    if word["X"] >= (divider_x_position - detection_range) and word["X"] <= (divider_x_position + detection_range):
                         valid_position = False
-                else: 
-                    valid_position = False
+                        break
             
             if valid_position == True:
                 valid_x_dividers.append((divider_x_position, valid_y_dividers[i], valid_y_dividers[j]))
-                all_title_x_points.remove(point)
+                points_to_remove = [p for p in all_title_x_points
+                                   if p[0] > divider_x_position and p[1] <= valid_y_dividers[i] and p[1] >= valid_y_dividers[j]]
+                for p in points_to_remove:
+                    all_title_x_points.remove(p)
                 
         divider_x_position -= detection_range
     return valid_x_dividers
